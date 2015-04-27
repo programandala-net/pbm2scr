@@ -1,37 +1,57 @@
 #! /usr/bin/env gforth
 
-\ pbm2scr.fs
-\ Graphic converter from PBM to ZX Spectrum SCR.
-s" A-01-201504271910" 2constant version
+\ pbm2scr
+
+s" A-02-2015042721" 2constant version
+
+\ A graphic converter from PBM to ZX Spectrum SCR.
+\ http://programandala.net/en.program.pbm2scr.html
+
+\ Copyright (C) 2015 Marcos Cruz (programandala.net)
+
+\ pbm2scr is free software; you can redistribute it and/or modify it
+\ under the terms of the GNU General Public License as published by
+\ the Free Software Foundation; either version 3 of the License, or
+\ (at your option) any later version.
+\
+\ pbm2scr is distributed in the hope that it will be useful, but
+\ WITHOUT ANY WARRANTY; without even the implied warranty of
+\ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+\ General Public License for more details.
+\
+\ You should have received a copy of the GNU General Public License
+\ along with pbm2scr; if not, see <http://gnu.org/licenses>.
+
+\ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+\ Acknowledgements
+
+\ pbm2scr is written in Forth with Gforth 0.7.3 (by Anton Ertl, Bernd
+\ Paysan et al.):
+\   http://gnu.org/software/gforth
+
+\ The information on the PBM format was obtained from the manual page
+\ of the Netpbm Debian package.
+
+\ The following article was most useful to code the low level
+\ calculation of the ZX Spectrum screen addresses:
+\   "Cómo manejar la pantalla desde código máquina"
+\   by Paco Portalo, published in the Microhobby magazine
+\   (issue 63, 1986-02, page 30):
+\     http://www.microhobby.org/numero063.htm
 
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 \ Development history
 
 \ 2015-04-26: Start. Version A-00.
 \
-\ 2015-04-27: First working version, A-01; it works fine with P1 and P4
-\ variants of the PBM format.
-
-\ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-\ References
-
-\ The PBM format details were obtained from the manual page of the
-\ Netpbm Debian package.
-
-\ The following article was most useful to code the low level
-\ calculation of the ZX Spectrum screen addresses:
-
-\ "Cómo manejar la pantalla desde código máquina"
-\ by Paco Portalo, published in Microhobby:
-\   Issue 63, 1986-02, p. 30:
-\     http://www.microhobby.org/numero063.htm
+\ 2015-04-27: Version A-01, first working version: it converts P1 and
+\ P4 variants of the PBM format.  Version A-02: it accepts any number
+\ of input files in the command line.
 
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 \ Requirements
 
 forth definitions
-
-require string.fs  \ Gforth dynamic strings
 
 \ From the Galope library
 \ (http://programandala.net/en.program.galope.html)
@@ -49,7 +69,7 @@ require string.fs  \ Gforth dynamic strings
   base @ >r 2 base ! s>d <# # # # # # # # # #> r> base ! type space ;
 
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-\ The ZX Spectrum screen
+\ ZX Spectrum screen
 
 \ A ZX Spectrum screen has two parts: first, the bitmap: 6144 bytes
 \ that represent a 256x192 bitmap, with a special order; second, the
@@ -64,13 +84,20 @@ require string.fs  \ Gforth dynamic strings
 
 zxscr /zxscr-bitmap + constant zxscr-attributes
 
-zxscr /zxscr-bitmap erase
-zxscr-attributes /zxscr-attributes 56 fill  \ white paper, black ink
+: init-zxscr  ( -- )
+  \ Init the ZX Spectrum screen buffer.
+  zxscr /zxscr-bitmap erase
+  zxscr-attributes /zxscr-attributes 56 fill  \ white paper, black ink
+  ;
 
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-\ The bitmap converter
+\ Bitmap converter
 
-\ XXX TODO
+\ XXX TODO -- remove the old code
+
+\ The ZX Spectrum screen bitmap is arranged in a very special way.
+\ Bit-level calculations are used to calculate the destination address
+\ of every input bitmap byte.
 
  32 constant chars/line   \ chars per line
 192 constant heigth       \ pixels
@@ -91,12 +118,8 @@ variable pixel-row    \ pixel row (0..191); top row is 0
 false constant [echo] immediate
 
 : >zxscr  ( +n -- ca )
-  \ XXX TODO
-  \ Convert a position in the input file PBM bitmap
+  \ Convert a position in the input file PBM bitmap (0..6143)
   \ to its correspondent address in the SCR bitmap buffer.
-  \ +n = position of the current byte in the input PBM bitmap
-  \      (0..6143)
-  \ ca = correspondent address in the output SCR bitmap buffer
 
   \ XXX INFORMER
   [echo] [if]
@@ -147,71 +170,18 @@ false constant [echo] immediate
 
   ;
 
-\ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-\ The PBM format
-
-\ From the documentation of Netpbm (Debian package):
-
-\ ---------------------------------------------- Each PBM image
-\ consists of the following:
-\ 
-\ - A "magic number" for identifying the file type.  A pbm image's
-\ magic number is the two characters "P4".
-\ 
-\ - Whitespace (blanks, TABs, CRs, LFs).
-\ 
-\ - The width in pixels of the image, formatted as ASCII characters in
-\ decimal.
-\ 
-\ - Whitespace.
-\ 
-\ - The height in pixels of the image, again in ASCII decimal.
-\ 
-\ - Newline or other single whitespace character.
-\ 
-\ - A  raster of Height rows, in order from top to bottom.  Each row
-\ is Width bits, packed 8 to a byte, with don't care bits to fill out
-\ the last byte in the row.  Each bit represents a pixel: 1  is black,
-\ 0  is white.   The  order of the pixels is left to right.  The order
-\ of their storage within each file byte is most significant bit to
-\ least significant bit.  The order of the file bytes is from the
-\ beginning of the file toward the end of the file.
-\ 
-\ - Characters  from  a  "#"  to  the  next  end-of-line, before the
-\ width/height line, are comments and are ignored.
+\ There are two variants of the PBM format: binary (P4 identifier) and
+\ ASCII (P1 identifier).
 \
-\ There is actually another version of the PBM format, even more more
-\ simplistic, more lavishly wasteful  of space than PBM, called Plain
-\ PBM.
+\ The bitmap bytes of the binary variant are ready to be copied into
+\ the ZX Spectrum bitmap, though in different positions.
 \
-\ The difference is:
-\
-\ - There is exactly one image in a file.
-\
-\ - The "magic number" is "P1" instead of "P4".
-\
-\ - Each pixel in the raster is represented by a byte containing ASCII
-\ '1' or '0',  representing  black  and white respectively.  There are
-\ no fill bits at the end of a row.
-\
-\ - White space in the raster section is ignored.
-\
-\ - You can put any junk you want after the raster, if it starts with
-\ a white space character.
-\
-\ - No line should be longer than 70 characters.
-\
-\ ----------------------------------------------
-
-\ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-\ The converter
-
-\ The chosen approach is to define Forth words with the name of the
-\ expected metadata, so the PBM file can be interpreted as a Forth
-\ source file.
+\ The bitmap bytes of the ASCII variant are represented by eight
+\ characters, so first they have to be calculated.
 
 : byte  ( -- b )
-  \ Get the next byte from the input file.
+  \ Get the next byte from the input file, currently being
+  \ interpreted as a Forth source.
   source-id key-file
   ;
 : delimiter?  ( c -- f )
@@ -220,13 +190,13 @@ false constant [echo] immediate
   ;
 : p1-bit-char  ( -- c )
   \ Get the next bit from the P1 input file,
-  \ represented by an ASCII character: 
+  \ represented by an ASCII character:
   \ "1"=black; "0"=white.
   begin   byte dup delimiter?  while  drop  repeat
   ;
 : p1-pixel?  ( -- f )
   \ Get the next pixel from the P1 input file.
-  \ f = true if black pixel, else white pixel.
+  \ f = true if black pixel, false if white pixel.
   p1-bit-char [char] 1 =
   ;
 : p1-byte  ( -- b )
@@ -244,7 +214,17 @@ defer bitmap-byte  ( -- b )
   /zxscr-bitmap 0 do  bitmap-byte i >zxscr c!  loop
   ;
 
-variable width? \ flag: width found in the input file?
+\ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+\ PBM header interpreter
+
+\ The header of a PBM file is always ASCII, and their elements are
+\ separated by ordinary text delimiters.
+\
+\ The chosen approach is to define Forth words with the name of the
+\ expected header metadata, so the PBM file can be simply interpreted
+\ as a Forth source file.
+
+variable width? \ flag: has the width been found in the input file?
 
 : check-type  ( -- )
   \ Abort if no file type was specified in the file header.
@@ -252,17 +232,17 @@ variable width? \ flag: width found in the input file?
   abort" File type not supported"
   ;
 : check-width  ( -- )
-  \ Abort if no width was specified in the file header.
+  \ Abort if the width was not found in the file header.
   width? @ 0= abort" The bitmap size must be 256x192"
   ;
 
 wordlist constant pbm-wordlist  \ words allowed in the PBM file
 pbm-wordlist set-current
 
-\ Only five words are needed to interpret a PBM file: the two possible
-\ magic numbers, the line comment character,  the width and the
-\ heigth. The heigth is the last one in the file header and it will do
-\ the conversion of the bitmap.
+\ Only five words are needed to interpret a 256x192 PBM file: the two
+\ possible magic numbers, the line comment character, the width and
+\ the heigth. The heigth is the last one in the file header and it
+\ will do the conversion of the bitmap.
 
 : p1  ( -- )
   \ P1 PBM, the ASCII variant of the format.
@@ -286,6 +266,9 @@ pbm-wordlist set-current
   check-type check-width  bitmap>scr
   ;
 
+\ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+\ File converter
+
 forth-wordlist set-current
 
 : save-scr  ( ca len -- )
@@ -297,7 +280,7 @@ forth-wordlist set-current
   \ Convert a 256x192 PBM file to a ZX Spectrum SCR file.
   \ ca len = input file name
   2>r  get-order
-  pbm-wordlist >order seal  2r@ included
+  init-zxscr pbm-wordlist >order seal  2r@ included
   set-order  2r> save-scr
   ;
 : usage  ( -- )
@@ -313,15 +296,16 @@ forth-wordlist set-current
   ." The output file name will be the input file name" cr
   ." with the .scr extension added." cr
   ;
-: parameter?  ( -- f )
-  \ Is there exactly one parameter in the command line?
-  argc @ 2 =
+: input-files  ( -- n )
+  \ Number of input files in the command line.
+  argc @ 1-
   ;
 : pbm>scr  ( -- )
-  \ Convert a 256x192 PBM file to a ZX Spectrum SCR file,
-  \ if an input file is provided.
+  \ Convert 256x192 PBM files to ZX Spectrum SCR files.
   fpath .path  \ XXX TMP
-  parameter? if  1 arg (pbm>scr)  else  usage  then
+  input-files ?dup
+  if    0 do  i 1+ arg (pbm>scr)  loop
+  else  usage  then
   ;
 
 pbm>scr bye
