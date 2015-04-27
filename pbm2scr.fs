@@ -2,20 +2,34 @@
 
 \ pbm2scr.fs
 \ Graphic converter from PBM to ZX Spectrum SCR.
-s" A-00-2015042714" 2constant version
+s" A-01-201504271910" 2constant version
 
-\ 2015-04-26: Start.
+\ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+\ Development history
 
-\ References:
-\   - Debian package Netpbm
-\   - man pbm
+\ 2015-04-26: Start. Version A-00.
+\
+\ 2015-04-27: First working version, A-01; it works fine with P1 and P4
+\ variants of the PBM format.
 
-forth definitions
+\ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+\ References
 
-marker --pbm2scr--
+\ The PBM format details were obtained from the manual page of the
+\ Netpbm Debian package.
+
+\ The following article was most useful to code the low level
+\ calculation of the ZX Spectrum screen addresses:
+
+\ "Cómo manejar la pantalla desde código máquina"
+\ by Paco Portalo, published in Microhobby:
+\   Issue 63, 1986-02, p. 30:
+\     http://www.microhobby.org/numero063.htm
 
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 \ Requirements
+
+forth definitions
 
 require string.fs  \ Gforth dynamic strings
 
@@ -29,6 +43,10 @@ require string.fs  \ Gforth dynamic strings
   r@ write-file throw
   r> close-file throw
   ;
+
+\ XXX TMP
+: bin.  ( n -- )
+  base @ >r 2 base ! s>d <# # # # # # # # # #> r> base ! type space ;
 
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 \ The ZX Spectrum screen
@@ -54,9 +72,14 @@ zxscr-attributes /zxscr-attributes 56 fill  \ white paper, black ink
 
 \ XXX TODO
 
-32 constant chars/line                    \ chars per line
+ 32 constant chars/line   \ chars per line
+192 constant heigth       \ pixels
+
 /zxscr-bitmap 3 / constant /zxscr-third   \ bytes per third of the bitmap
 256 constant chars/third                  \ chars per third
+
+variable x
+variable y
 
 variable third        \ third of the bitmap (0..2)
 variable char/third   \ character in the third (0..255)
@@ -65,47 +88,62 @@ variable char-col     \ character row (0..31)
 variable char-scan    \ character scan (0..7)
 variable pixel-row    \ pixel row (0..191); top row is 0
 
-: scr-address  ( +n -- ca )
+false constant [echo] immediate
+
+: >zxscr  ( +n -- ca )
   \ XXX TODO
-  \ Convert a position in the input file bitmap
-  \ to its correspondent address in the SCR buffer.
+  \ Convert a position in the input file PBM bitmap
+  \ to its correspondent address in the SCR bitmap buffer.
   \ +n = position of the current byte in the input PBM bitmap
+  \      (0..6143)
   \ ca = correspondent address in the output SCR bitmap buffer
 
-  dup >r
-  dup chars/line / 8 * pixel-row !
-  dup chars/line mod char-col !
-  dup /zxscr-third / third !
-  dup /zxscr-third mod chars/third mod char/third ! \ XXX FIXME
-      \ /zxscr-third mod chars/third / char-scan ! \ XXX FIXME
-      pixel-row @ 8 / char-scan ! \ XXX FIXME
-
-
-  \ Calculate the offset into the SCR bitmap
-  \ XXX FIXME
-  0
-  \ third @ /zxscr-third * +
-  \ chars/third char-scan @ * +
-  chars/third pixel-row @ * +
-  char-col @ +
-
   \ XXX INFORMER
-  [ 1 ] [if]
-    r> ." +n=" 4 .r space
-    ." char/third=" char/third @ 3 .r space
-    ." pixel-row=" pixel-row @ 3 .r space
-    ." char-col=" char-col @ 2 .r space
-    ." third=" third ? 
-    ." char-scan=" char-scan ? 
-    dup 16384 + ." ZX Spectrum address=" . cr
-    key drop
-  [else]  rdrop
+  [echo] [if]
+    dup ." +n=" 3 .r space
   [then]
 
-  \ dup /zxscr > abort" Fatal error: out of range" \ XXX TMP
-  /zxscr-bitmap min
+  \ Calculate the required data from the input position.
+  dup /zxscr-third / third !
+  dup chars/line / y !  \ XXX TMP
+      chars/line mod dup char-col !
+                         8 * x !
 
-  zxscr +
+  y @ dup %000111 and char-scan !
+          %111000 and 3 rshift pixel-row !
+  
+  \ XXX INFORMER
+  [echo] [if]
+    \ ." +n=" 4 .r space
+    ." third=" third ? 
+    ." x=" x @ 3 .r space
+    ." y=" y @ 3 .r space
+    ." pixel-row=" pixel-row @ 3 .r space
+    ." char-col=" char-col @ 2 .r space
+    ." char-scan=" char-scan ? 
+  [then]
+  
+  \ Calculate the correspondent position
+  \ in the ZX Spectrum bitmap (0..6143).
+  pixel-row @ 32 *  char-col @ +  \ low byte
+  [echo] [if]
+    dup bin.  \ XXX INFORMER
+  [then]
+  third @ 8 * char-scan @ +       \ high byte
+  [echo] [if]
+    dup bin.  \ XXX INFORMER
+  [then]
+  256 * +                         \ result
+  \ XXX INFORMER
+  [echo] [if]
+    dup 16384 + ." ZX Spectrum address=" . cr
+    \ key drop
+  [then]
+
+  dup /zxscr > abort" Bitmap bigger than 256x192" \ XXX TMP
+  \ /zxscr-bitmap min
+
+  zxscr +  \ actual address in the output buffer
 
   ;
 
@@ -176,34 +214,34 @@ variable pixel-row    \ pixel row (0..191); top row is 0
   \ Get the next byte from the input file.
   source-id key-file
   ;
-' byte alias p4-byte  ( -- b )
-  \ Get the next bitmap byte from the P4 input file.
-: p1-bit  ( -- c )
+: delimiter?  ( c -- f )
+  \ Is the given char a delimiter in the P1 bitmap?
+  bl <=
+  ;
+: p1-bit-char  ( -- c )
   \ Get the next bit from the P1 input file,
   \ represented by an ASCII character: 
   \ "1"=black; "0"=white.
-  \ XXX TODO check what happens with end of line
-  begin   byte dup bl =
-  while   drop  \ skip spaces
-  repeat
+  begin   byte dup delimiter?  while  drop  repeat
+  ;
+: p1-pixel?  ( -- f )
+  \ Get the next pixel from the P1 input file.
+  \ f = true if black pixel, else white pixel.
+  p1-bit-char [char] 1 =
   ;
 : p1-byte  ( -- b )
   \ Get the next bitmap byte from the P1 input file,
   \ represented by 8 ASCII characters:
   \ "1"=black; "0"=white.
   0  \ return value
-  8 0 do
-    p1-bit [char] 1 = 128 and i rshift or
-  loop
+  8 0 do  p1-pixel? 128 and i rshift or  loop
   ;
 defer bitmap-byte  ( -- b )
   \ Get the next bitmap byte from the input file.
   ' false is bitmap-byte  \ default, used for checking
 : bitmap>scr  ( "<bitmap>" -- )
   \ Get the PBM bitmap and convert it to the SCR bitmap.
-  /zxscr-bitmap 0 do
-    bitmap-byte i scr-address c!
-  loop
+  /zxscr-bitmap 0 do  bitmap-byte i >zxscr c!  loop
   ;
 
 variable width? \ flag: width found in the input file?
@@ -227,12 +265,12 @@ pbm-wordlist set-current
 \ the conversion of the bitmap.
 
 : p1  ( -- )
-  \ Set a P1 PBM, the ASCII variant of the format.
+  \ P1 PBM, the ASCII variant of the format.
   ['] p1-byte is bitmap-byte
   ;
 : p4  ( -- )
-  \ Set a P4 PBM, the binary variant of the format.
-  ['] p4-byte is bitmap-byte
+  \ P4 PBM, the binary variant of the format.
+  ['] byte is bitmap-byte
   ;
 ' \ alias #  ( "ccc<newline>" -- )
   \ Line comment.
@@ -264,7 +302,7 @@ forth-wordlist set-current
   ;
 : usage  ( -- )
   ." pbm2scr" cr
-  ." A PBM to ZX Spectrum SCR graphic converter" cr
+  ." PBM to ZX Spectrum SCR graphic converter" cr
   ." Version " version type cr
   ." http://programandala.net/en.program.pbm2scr.html" cr cr
   ." Copyright (C) 2015 Marcos Cruz (programandala.net)" cr cr
@@ -282,6 +320,7 @@ forth-wordlist set-current
 : pbm>scr  ( -- )
   \ Convert a 256x192 PBM file to a ZX Spectrum SCR file,
   \ if an input file is provided.
+  fpath .path  \ XXX TMP
   parameter? if  1 arg (pbm>scr)  else  usage  then
   ;
 
