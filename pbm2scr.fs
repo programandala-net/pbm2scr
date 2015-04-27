@@ -2,7 +2,7 @@
 
 \ pbm2scr.fs
 \ Graphic converter from PBM to ZX Spectrum SCR.
-s" A-00-201504271314" 2constant version
+s" A-00-2015042714" 2constant version
 
 \ 2015-04-26: Start.
 
@@ -59,41 +59,50 @@ zxscr-attributes /zxscr-attributes 56 fill  \ white paper, black ink
 256 constant chars/third                  \ chars per third
 
 variable third        \ third of the bitmap (0..2)
+variable char/third   \ character in the third (0..255)
 variable char-row     \ character row (0..23)
 variable char-col     \ character row (0..31)
 variable char-scan    \ character scan (0..7)
 variable pixel-row    \ pixel row (0..191); top row is 0
 
-: scr-address  ( n -- a )
+: scr-address  ( +n -- ca )
   \ XXX TODO
-  \ n = position of the current byte in the input bitmap
-  \ a = correspondent address in the output bitmap
+  \ Convert a position in the input file bitmap
+  \ to its correspondent address in the SCR buffer.
+  \ +n = position of the current byte in the input PBM bitmap
+  \ ca = correspondent address in the output SCR bitmap buffer
 
-  dup chars/line / pixel-row !
+  dup >r
+  dup chars/line / 8 * pixel-row !
   dup chars/line mod char-col !
   dup /zxscr-third / third !
+  dup /zxscr-third mod chars/third mod char/third ! \ XXX FIXME
       \ /zxscr-third mod chars/third / char-scan ! \ XXX FIXME
       pixel-row @ 8 / char-scan ! \ XXX FIXME
 
 
   \ Calculate the offset into the SCR bitmap
+  \ XXX FIXME
   0
   \ third @ /zxscr-third * +
-  \ chars/third char-scan @ * + \ XXX FIXME
+  \ chars/third char-scan @ * +
   chars/third pixel-row @ * +
   char-col @ +
 
   \ XXX INFORMER
   [ 1 ] [if]
-    ." pixel-row " pixel-row ? cr
-    ." char-col " char-col ? cr
-    ." third " third ? cr
-    ." char-scan " char-scan ? cr
-    dup 16384 + ." result address is ZX Spectrum " . cr
+    r> ." +n=" 4 .r space
+    ." char/third=" char/third @ 3 .r space
+    ." pixel-row=" pixel-row @ 3 .r space
+    ." char-col=" char-col @ 2 .r space
+    ." third=" third ? 
+    ." char-scan=" char-scan ? 
+    dup 16384 + ." ZX Spectrum address=" . cr
     key drop
+  [else]  rdrop
   [then]
 
-  \ dup /zxscr > abort" Fatal error: out of range"
+  \ dup /zxscr > abort" Fatal error: out of range" \ XXX TMP
   /zxscr-bitmap min
 
   zxscr +
