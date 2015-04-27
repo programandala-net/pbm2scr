@@ -2,6 +2,7 @@
 
 \ pbm2scr.fs
 \ Graphic converter from PBM to ZX Spectrum SCR.
+s" A-00-201504271314" 2constant version
 
 \ 2015-04-26: Start.
 
@@ -49,7 +50,58 @@ zxscr /zxscr-bitmap erase
 zxscr-attributes /zxscr-attributes 56 fill  \ white paper, black ink
 
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-\ The PBM header
+\ The bitmap converter
+
+\ XXX TODO
+
+32 constant chars/line                    \ chars per line
+/zxscr-bitmap 3 / constant /zxscr-third   \ bytes per third of the bitmap
+256 constant chars/third                  \ chars per third
+
+variable third        \ third of the bitmap (0..2)
+variable char-row     \ character row (0..23)
+variable char-col     \ character row (0..31)
+variable char-scan    \ character scan (0..7)
+variable pixel-row    \ pixel row (0..191); top row is 0
+
+: scr-address  ( n -- a )
+  \ XXX TODO
+  \ n = position of the current byte in the input bitmap
+  \ a = correspondent address in the output bitmap
+
+  dup chars/line / pixel-row !
+  dup chars/line mod char-col !
+  dup /zxscr-third / third !
+      \ /zxscr-third mod chars/third / char-scan ! \ XXX FIXME
+      pixel-row @ 8 / char-scan ! \ XXX FIXME
+
+
+  \ Calculate the offset into the SCR bitmap
+  0
+  \ third @ /zxscr-third * +
+  \ chars/third char-scan @ * + \ XXX FIXME
+  chars/third pixel-row @ * +
+  char-col @ +
+
+  \ XXX INFORMER
+  [ 1 ] [if]
+    ." pixel-row " pixel-row ? cr
+    ." char-col " char-col ? cr
+    ." third " third ? cr
+    ." char-scan " char-scan ? cr
+    dup 16384 + ." result address is ZX Spectrum " . cr
+    key drop
+  [then]
+
+  \ dup /zxscr > abort" Fatal error: out of range"
+  /zxscr-bitmap min
+
+  zxscr +
+
+  ;
+
+\ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+\ The PBM format
 
 \ From the documentation of Netpbm (Debian package):
 
@@ -104,33 +156,40 @@ zxscr-attributes /zxscr-attributes 56 fill  \ white paper, black ink
 \
 \ ----------------------------------------------
 
-\ The chosen approach is to define Forth words, so the PBM file can be
-\ interpreted as a Forth source file.
+\ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+\ The converter
+
+\ The chosen approach is to define Forth words with the name of the
+\ expected metadata, so the PBM file can be interpreted as a Forth
+\ source file.
 
 : byte  ( -- b )
   \ Get the next byte from the input file.
   source-id key-file
   ;
-: scr-address  ( n -- a )
-  \ XXX TODO
-  zxscr +
-  ;
+' byte alias p4-byte  ( -- b )
+  \ Get the next bitmap byte from the P4 input file.
 : p1-bit  ( -- c )
   \ Get the next bit from the P1 input file,
-  \ represented by a character: "1" or "0".
+  \ represented by an ASCII character: 
+  \ "1"=black; "0"=white.
+  \ XXX TODO check what happens with end of line
   begin   byte dup bl =
   while   drop  \ skip spaces
   repeat
   ;
 : p1-byte  ( -- b )
   \ Get the next bitmap byte from the P1 input file,
-  \ represented by 8 characters: "1"=black; "0"=white.
+  \ represented by 8 ASCII characters:
+  \ "1"=black; "0"=white.
   0  \ return value
   8 0 do
     p1-bit [char] 1 = 128 and i rshift or
   loop
   ;
 defer bitmap-byte  ( -- b )
+  \ Get the next bitmap byte from the input file.
+  ' false is bitmap-byte  \ default, used for checking
 : bitmap>scr  ( "<bitmap>" -- )
   \ Get the PBM bitmap and convert it to the SCR bitmap.
   /zxscr-bitmap 0 do
@@ -139,12 +198,10 @@ defer bitmap-byte  ( -- b )
   ;
 
 variable width? \ flag: width found in the input file?
-variable p1? \ flag: P1 magic number found in the input file?
-variable p4? \ flag: P4 magic number found in the input file?
 
 : check-type  ( -- )
   \ Abort if no file type was specified in the file header.
-  p1? @ p4? @ or 0=
+  ['] bitmap-byte defer@ ['] false =  \ `bitmap-byte` not set?
   abort" File type not supported"
   ;
 : check-width  ( -- )
@@ -152,18 +209,24 @@ variable p4? \ flag: P4 magic number found in the input file?
   width? @ 0= abort" The bitmap size must be 256x192"
   ;
 
-wordlist constant pbm-wid  \ words allowed in the PBM file
-pbm-wid set-current
+wordlist constant pbm-wordlist  \ words allowed in the PBM file
+pbm-wordlist set-current
 
-' \ alias #  ( "ccc<newline>" -- )
+\ Only five words are needed to interpret a PBM file: the two possible
+\ magic numbers, the line comment character,  the width and the
+\ heigth. The heigth is the last one in the file header and it will do
+\ the conversion of the bitmap.
+
 : p1  ( -- )
   \ Set a P1 PBM, the ASCII variant of the format.
-  p1? on  ['] p1-byte is bitmap-byte
+  ['] p1-byte is bitmap-byte
   ;
 : p4  ( -- )
   \ Set a P4 PBM, the binary variant of the format.
-  p4? on  ['] byte is bitmap-byte
+  ['] p4-byte is bitmap-byte
   ;
+' \ alias #  ( "ccc<newline>" -- )
+  \ Line comment.
 : 256  ( -- )
   \ The width of the image.
   \ This is the last but one metadata before the bitmap.
@@ -176,34 +239,41 @@ pbm-wid set-current
   check-type check-width  bitmap>scr
   ;
 
-forth definitions
+forth-wordlist set-current
 
 : save-scr  ( ca len -- )
   \ Save the SCR buffer to the output file.
   \ ca len = input file name
   s" .scr" s+ zxscr /zxscr 2swap unslurp-file
   ;
-
 : (pbm>scr)  ( ca len -- )
+  \ Convert a 256x192 PBM file to a ZX Spectrum SCR file.
   \ ca len = input file name
-  2dup
-  pbm-wid >order seal  included  only forth
-  save-scr
+  2>r  get-order
+  pbm-wordlist >order seal  2r@ included
+  set-order  2r> save-scr
   ;
 : usage  ( -- )
-  cr ." pbm2scr" cr
+  ." pbm2scr" cr
+  ." A PBM to ZX Spectrum SCR graphic converter" cr
+  ." Version " version type cr
+  ." http://programandala.net/en.program.pbm2scr.html" cr cr
   ." Copyright (C) 2015 Marcos Cruz (programandala.net)" cr cr
-  ." Usage:" cr
-  ."   pbm2scr.fs input_file.pbm" cr
-  ." The output file name will have the scr extension added." cr
+  ." Usage:" cr cr
+  ."   pbm2scr.fs input_file.pbm" cr cr
+  ." The input file must be a 256x192 PBM image," cr
+  ." in binary or ASCII variant of the format." cr cr
+  ." The output file name will be the input file name" cr
+  ." with the .scr extension added." cr
   ;
 : parameter?  ( -- f )
-  \ Is there one parameter in the command line?
+  \ Is there exactly one parameter in the command line?
   argc @ 2 =
   ;
 : pbm>scr  ( -- )
-  \ Convert a PBM file to a ZX Spectrum SCR file.
-  parameter? if  1 arg (pbm>scr)  else  usage  then  bye
+  \ Convert a 256x192 PBM file to a ZX Spectrum SCR file,
+  \ if an input file is provided.
+  parameter? if  1 arg (pbm>scr)  else  usage  then
   ;
 
-pbm>scr
+pbm>scr bye
