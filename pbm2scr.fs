@@ -2,9 +2,9 @@
 
 \ pbm2scr
 
-s" A-02-2015042721" 2constant version
+s" A-02-2015042802" 2constant version
 
-\ A graphic converter from PBM to ZX Spectrum SCR.
+\ A PBM to ZX Spectrum SCR graphic converter.
 \ http://programandala.net/en.program.pbm2scr.html
 
 \ Copyright (C) 2015 Marcos Cruz (programandala.net)
@@ -25,8 +25,8 @@ s" A-02-2015042721" 2constant version
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 \ Acknowledgements
 
-\ pbm2scr is written in Forth with Gforth 0.7.3 (by Anton Ertl, Bernd
-\ Paysan et al.):
+\ pbm2scr is written in Forth with Gforth 0.7.3 (by Anton Ertl,
+\ Bernd Paysan et al.):
 \   http://gnu.org/software/gforth
 
 \ The information on the PBM format was obtained from the manual page
@@ -47,6 +47,9 @@ s" A-02-2015042721" 2constant version
 \ 2015-04-27: Version A-01, first working version: it converts P1 and
 \ P4 variants of the PBM format.  Version A-02: it accepts any number
 \ of input files in the command line.
+\
+\ 2015-04-28: The extension of the output file name is not simply
+\ appended any more but substitutes that of the input file name.
 
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 \ Requirements
@@ -56,13 +59,8 @@ forth definitions
 \ From the Galope library
 \ (http://programandala.net/en.program.galope.html)
 
-: unslurp-file  ( ca1 len1 ca2 len2 -- )
-  \ ca1 len1 = content to write to the file
-  \ ca2 len2 = filename
-  w/o create-file throw >r
-  r@ write-file throw
-  r> close-file throw
-  ;
+require galope/unslurp-file.fs
+require galope/minus-extension.fs
 
 \ XXX TMP
 : bin.  ( n -- )
@@ -105,9 +103,6 @@ zxscr /zxscr-bitmap + constant zxscr-attributes
 /zxscr-bitmap 3 / constant /zxscr-third   \ bytes per third of the bitmap
 256 constant chars/third                  \ chars per third
 
-variable x
-variable y
-
 variable third        \ third of the bitmap (0..2)
 variable char/third   \ character in the third (0..255)
 variable char-row     \ character row (0..23)
@@ -115,37 +110,32 @@ variable char-col     \ character row (0..31)
 variable char-scan    \ character scan (0..7)
 variable pixel-row    \ pixel row (0..191); top row is 0
 
-false constant [echo] immediate
+0 constant [echo] immediate
 
 : >zxscr  ( +n -- ca )
+
   \ Convert a position in the input file PBM bitmap (0..6143)
   \ to its correspondent address in the SCR bitmap buffer.
 
-  \ XXX INFORMER
-  [echo] [if]
+  [echo] [if]  \ XXX INFORMER
     dup ." +n=" 3 .r space
   [then]
 
   \ Calculate the required data from the input position.
-  dup /zxscr-third / third !
-  dup chars/line / y !  \ XXX TMP
-      chars/line mod dup char-col !
-                         8 * x !
+  dup /zxscr-third / third !                \ bitmap third (0..2)
+  dup chars/line /                          \ y row (0..191)
+      dup %000111 and char-scan !           \ char scan (0..7)
+          %111000 and 3 rshift pixel-row !  \ pixel row (0..7) ? XXX
+      chars/line mod char-col !             \ char col (0..31)
 
-  y @ dup %000111 and char-scan !
-          %111000 and 3 rshift pixel-row !
-  
-  \ XXX INFORMER
-  [echo] [if]
+  [echo] [if] \ XXX INFORMER
     \ ." +n=" 4 .r space
     ." third=" third ? 
-    ." x=" x @ 3 .r space
-    ." y=" y @ 3 .r space
     ." pixel-row=" pixel-row @ 3 .r space
     ." char-col=" char-col @ 2 .r space
     ." char-scan=" char-scan ? 
   [then]
-  
+
   \ Calculate the correspondent position
   \ in the ZX Spectrum bitmap (0..6143).
   pixel-row @ 32 *  char-col @ +  \ low byte
@@ -181,7 +171,7 @@ false constant [echo] immediate
 
 : byte  ( -- b )
   \ Get the next byte from the input file, currently being
-  \ interpreted as a Forth source.
+  \ interpreted as a Forth source file.
   source-id key-file
   ;
 : delimiter?  ( c -- f )
@@ -217,8 +207,8 @@ defer bitmap-byte  ( -- b )
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 \ PBM header interpreter
 
-\ The header of a PBM file is always ASCII, and their elements are
-\ separated by ordinary text delimiters.
+\ The header of a PBM file is ASCII, and their elements are separated
+\ by ordinary text delimiters.
 \
 \ The chosen approach is to define Forth words with the name of the
 \ expected header metadata, so the PBM file can be simply interpreted
@@ -269,21 +259,30 @@ pbm-wordlist set-current
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 \ File converter
 
-forth-wordlist set-current
+forth definitions
 
+: working-dir  ( -- ca len )
+  \ Current working directory.
+  s" PWD" getenv
+  ;
+: working-dir+  ( ca1 len1 -- ca2 len2 )
+  \ Add the current working directory to a file name.
+  working-dir s" /" s+ 2swap s+
+  ;
 : save-scr  ( ca len -- )
   \ Save the SCR buffer to the output file.
   \ ca len = input file name
-  s" .scr" s+ zxscr /zxscr 2swap unslurp-file
+  -extension s" .scr" s+ zxscr /zxscr 2swap unslurp-file
   ;
 : (pbm>scr)  ( ca len -- )
   \ Convert a 256x192 PBM file to a ZX Spectrum SCR file.
   \ ca len = input file name
   2>r  get-order
-  init-zxscr pbm-wordlist >order seal  2r@ included
+  init-zxscr pbm-wordlist >order seal
+  2r@ working-dir+ included
   set-order  2r> save-scr
   ;
-: usage  ( -- )
+: about  ( -- )
   ." pbm2scr" cr
   ." PBM to ZX Spectrum SCR graphic converter" cr
   ." Version " version type cr
@@ -292,9 +291,9 @@ forth-wordlist set-current
   ." Usage:" cr cr
   ."   pbm2scr.fs input_file.pbm" cr cr
   ." The input file must be a 256x192 PBM image," cr
-  ." in binary or ASCII variant of the format." cr cr
+  ." in binary or ASCII variants of the format." cr cr
   ." The output file name will be the input file name" cr
-  ." with the .scr extension added." cr
+  ." with the '.scr' extension instead of '.pbm'." cr
   ;
 : input-files  ( -- n )
   \ Number of input files in the command line.
@@ -302,10 +301,9 @@ forth-wordlist set-current
   ;
 : pbm>scr  ( -- )
   \ Convert 256x192 PBM files to ZX Spectrum SCR files.
-  fpath .path  \ XXX TMP
   input-files ?dup
   if    0 do  i 1+ arg (pbm>scr)  loop
-  else  usage  then
+  else  about  then
   ;
 
 pbm>scr bye
