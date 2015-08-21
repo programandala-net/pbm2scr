@@ -2,25 +2,24 @@
 
 \ pbm2scr
 
-s" A-02-2015042802" 2constant version
+s" A-02-20150821" 2constant version
 
-\ A PBM to ZX Spectrum SCR graphic converter.
+\ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+\ Description
+
+\ pbm2scr is a command line tool that converts 256x192 PBM graphics
+\ (P1 and P4 versions) to ZX Spectrum SCR graphic files.
+
 \ http://programandala.net/en.program.pbm2scr.html
+
+\ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+\ Author and license
 
 \ Copyright (C) 2015 Marcos Cruz (programandala.net)
 
-\ pbm2scr is free software; you can redistribute it and/or modify it
-\ under the terms of the GNU General Public License as published by
-\ the Free Software Foundation; either version 3 of the License, or
-\ (at your option) any later version.
-\
-\ pbm2scr is distributed in the hope that it will be useful, but
-\ WITHOUT ANY WARRANTY; without even the implied warranty of
-\ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-\ General Public License for more details.
-\
-\ You should have received a copy of the GNU General Public License
-\ along with pbm2scr; if not, see <http://gnu.org/licenses>.
+\ You may do whatever you want with this work, so long as you retain
+\ the copyright notice(s) and this license in all redistributed copies
+\ and derived works. There is no warranty.
 
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 \ Acknowledgements
@@ -40,7 +39,25 @@ s" A-02-2015042802" 2constant version
 \     http://www.microhobby.org/numero063.htm
 
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-\ Development history
+\ Installation
+
+\ XXX TODO Galope library.
+
+\ 1) Install Gforth. It's included with most Linux distros, or you can
+\ get it from <http://gnu.org/software/gforth>.
+\
+\ 2) Make sure <pbm2scr.fs> is executable:
+\
+\   chmod u+x pbm2scr.fs
+\
+\ 3) Copy, move or link <pbm2scr.fs> to a directory in your path (e.g.
+\ </usr/local/bin/> or <~/bin/>), optionally with the filename
+\ extension removed. Example:
+\
+\   ln pmb2scr.fs /usr/local/bin/fmb2scr
+
+\ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+\ History
 
 \ 2015-04-26: Start. Version A-00.
 \
@@ -50,6 +67,10 @@ s" A-02-2015042802" 2constant version
 \
 \ 2015-04-28: The extension of the output file name is not simply
 \ appended any more but substitutes that of the input file name.
+\
+\ 2015-08-21: Created constant for the default color. Removed the
+\ debugging code. Added installation instructions (the Galope library
+\ is pending). Improved the text in `about`.
 
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 \ Requirements
@@ -61,10 +82,6 @@ forth definitions
 
 require galope/unslurp-file.fs
 require galope/minus-extension.fs
-
-\ XXX TMP
-: bin.  ( n -- )
-  base @ >r 2 base ! s>d <# # # # # # # # # #> r> base ! type space ;
 
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 \ ZX Spectrum screen
@@ -82,16 +99,20 @@ require galope/minus-extension.fs
 
 zxscr /zxscr-bitmap + constant zxscr-attributes
 
+%00111000 constant color  \ default color: white paper, black ink
+  \ bits 0..2 = ink
+  \ bits 3..5 = paper
+  \ bit 6     = bright
+  \ bit 7     = flash
+
 : init-zxscr  ( -- )
   \ Init the ZX Spectrum screen buffer.
   zxscr /zxscr-bitmap erase
-  zxscr-attributes /zxscr-attributes 56 fill  \ white paper, black ink
+  zxscr-attributes /zxscr-attributes color fill
   ;
 
 \ \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 \ Bitmap converter
-
-\ XXX TODO -- remove the old code
 
 \ The ZX Spectrum screen bitmap is arranged in a very special way.
 \ Bit-level calculations are used to calculate the destination address
@@ -110,16 +131,10 @@ variable char-col     \ character row (0..31)
 variable char-scan    \ character scan (0..7)
 variable pixel-row    \ pixel row (0..191); top row is 0
 
-0 constant [echo] immediate
-
 : >zxscr  ( +n -- ca )
 
   \ Convert a position in the input file PBM bitmap (0..6143)
   \ to its correspondent address in the SCR bitmap buffer.
-
-  [echo] [if]  \ XXX INFORMER
-    dup ." +n=" 3 .r space
-  [then]
 
   \ Calculate the required data from the input position.
   dup /zxscr-third / third !                \ bitmap third (0..2)
@@ -128,34 +143,13 @@ variable pixel-row    \ pixel row (0..191); top row is 0
           %111000 and 3 rshift pixel-row !  \ pixel row (0..7) ? XXX
       chars/line mod char-col !             \ char col (0..31)
 
-  [echo] [if] \ XXX INFORMER
-    \ ." +n=" 4 .r space
-    ." third=" third ? 
-    ." pixel-row=" pixel-row @ 3 .r space
-    ." char-col=" char-col @ 2 .r space
-    ." char-scan=" char-scan ? 
-  [then]
-
   \ Calculate the correspondent position
   \ in the ZX Spectrum bitmap (0..6143).
   pixel-row @ 32 *  char-col @ +  \ low byte
-  [echo] [if]
-    dup bin.  \ XXX INFORMER
-  [then]
   third @ 8 * char-scan @ +       \ high byte
-  [echo] [if]
-    dup bin.  \ XXX INFORMER
-  [then]
   256 * +                         \ result
-  \ XXX INFORMER
-  [echo] [if]
-    dup 16384 + ." ZX Spectrum address=" . cr
-    \ key drop
-  [then]
 
-  dup /zxscr > abort" Bitmap bigger than 256x192" \ XXX TMP
-  \ /zxscr-bitmap min
-
+  dup /zxscr > abort" Bitmap bigger than 256x192"
   zxscr +  \ actual address in the output buffer
 
   ;
@@ -288,7 +282,9 @@ forth definitions
   ." Version " version type cr
   ." http://programandala.net/en.program.pbm2scr.html" cr cr
   ." Copyright (C) 2015 Marcos Cruz (programandala.net)" cr cr
-  ." Usage:" cr cr
+  ." Usage:" cr
+  ."   pbm2scr input_file.pbm" cr
+  ." Or (depending on the installation method):" cr
   ."   pbm2scr.fs input_file.pbm" cr cr
   ." The input file must be a 256x192 PBM image," cr
   ." in binary or ASCII variants of the format." cr cr
