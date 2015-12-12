@@ -1,0 +1,75 @@
+= pbm2scr
+:author: Marcos Cruz (programandala.net)
+:revdate: 2015-12-12
+:linkattrs:
+
+// Copyright (C) 2015 Marcos Cruz (programandala.net)
+//
+// You may do whatever you want with this work, so long as you
+// retain the copyright notice(s) and this license in all
+// redistributed copies and derived works. There is no warranty.
+
+// This file is written in AsciiDoc/Asciidoctor format.
+// See <http://asciidoctor.org>.
+
+== Description
+
+pbm2scr is a command line tool, written in Forth, that converts
+256x192 https://en.wikipedia.org/wiki/Netpbm_format[PBM
+graphics, role="external"] (both P1 and P4 variants) to ZX
+Spectrum SCR graphic files.
+
+pbm2scr was written to create the graphic title of
+http://programandala.net/en.program.tron_0xf.html[Tron 0xF], a
+ZX Spectrum game written in Forth.
+
+The webpage of pbm2scr is
+http://programandala.net/en.program.pbm2scr.html.
+
+== Requirements
+
+http://www.gnu.org/software/gforth/[Gforth, role="external"]
+must be installed on the system. Gforth is a package included in
+many GNU/Linux distributions, but source and binary
+distributions for popular platforms can be found on its website.
+
+Some modules of the
+http://programandala.net/en.program.galope.html[Galope library]
+are used, but they are already included in the source.
+
+== Files
+
+README.adoc :: This file.
+pbm2scr.fs :: Forth source.
+LICENSE.txt :: The license.
+samples/ :: Some sample pictures in P1 and P4 PBM formats, and
+their ZX Spectrum SCR versions.
+
+== Installation
+
+First, make sure <pbm2scr.fs> is executable:
+
+----
+chmod 0755 pbm2scr.fs
+----
+
+Second, link it into </usr/local/bin/>, with the filename
+extension removed:
+
+----
+ln pbm2scr.fs /usr/local/bin/pbm2scr
+----
+
+Depending on your system configuration, you may need a symbolic
+link instead, or a different target directory.
+
+== Usage
+
+----
+pbm2scr [INPUT-FILES]
+----
+
+Every input file is converted to an output file, with the same
+filename but the __.scr__ extension
+
+// vim: tw=64:ts=2:sts=2:sw=2:et
