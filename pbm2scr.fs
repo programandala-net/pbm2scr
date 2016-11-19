@@ -2,9 +2,9 @@
 
 \ pbm2scr
 
-: version  s" 0.3.0-20151212"  ;
+: version  s" 0.3.1+20161119"  ;
 
-\ Last modified: 201512121940
+\ Last modified: 201611192029
 
 \ ==============================================================
 \ Description
@@ -41,10 +41,12 @@
 \ The following article was most useful to code the low level
 \ calculation of the ZX Spectrum screen addresses:
 
-\   "Cómo manejar la pantalla desde código máquina"
-\   by Paco Portalo, published in the Microhobby magazine
-\   (issue 63, 1986-02, page 30):
+\   "Cómo manejar la pantalla desde código máquina" by Paco
+\   Portalo, published in Microhobby (issue 63, 1986-02, page
+\   30):
 \     http://www.microhobby.org/numero063.htm
+\     http://microhobby.speccy.cz/mhf/063/MH063_30.jpg
+\     http://microhobby.speccy.cz/mhf/063/MH063_31.jpg
 
 \ ==============================================================
 \ Installation
@@ -297,7 +299,7 @@ forth definitions
   ." PBM to ZX Spectrum SCR graphic converter" cr
   ." Version " version type cr
   ." http://programandala.net/en.program.pbm2scr.html" cr cr
-  ." Copyright (C) 2015 Marcos Cruz (programandala.net)" cr cr
+  ." Copyright (C) 2015,2016 Marcos Cruz (programandala.net)" cr cr
   ." Usage:" cr
   ."   pbm2scr [INPUT-FILES]" cr cr
   ." The input file must be a 256x192 PBM image," cr
@@ -338,6 +340,10 @@ run bye
 \ position of comments, in order to publish it. Factored
 \ `>zxscr` into three words.  Changed the version numbering
 \ system. Version 0.3.0. Added documentation and samples.
+\
+\ 2016-11-19: Fix the format of the version number, after
+\ Semantic Versioning (http://semver.org). Add direct links to
+\ Microhobby pages.
 
 \ vim: textwidth=64
 
