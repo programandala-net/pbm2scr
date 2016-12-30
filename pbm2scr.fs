@@ -2,9 +2,9 @@
 
 \ pbm2scr
 
-: version  s" 0.3.1+20161119"  ;
+: version  s" 0.3.1+201612302009"  ;
 
-\ Last modified: 201611192029
+\ Last modified: 201612302009
 
 \ ==============================================================
 \ Description
@@ -15,10 +15,13 @@
 
 \ http://programandala.net/en.program.pbm2scr.html
 
+\ This program is written in Forth (http://forth-standard.org)
+\ with Gforth (http://gnu.org/software/gforth/).
+
 \ ==============================================================
 \ Author and license
 
-\ Copyright (C) 2015 Marcos Cruz (programandala.net)
+\ Copyright (C) 2015,2016 Marcos Cruz (programandala.net)
 
 \ You may do whatever you want with this work, so long as you
 \ retain the copyright notice(s) and this license in all
@@ -26,11 +29,6 @@
 
 \ ==============================================================
 \ Acknowledgements
-
-\ pbm2scr is written in Forth with Gforth (by Anton Ertl, Bernd
-\ Paysan et al.):
-
-\   http://gnu.org/software/gforth
 
 \ The information on the PBM format was obtained from the manual
 \ page of the Netpbm Debian package. But also the Wikipedia
@@ -344,6 +342,10 @@ run bye
 \ 2016-11-19: Fix the format of the version number, after
 \ Semantic Versioning (http://semver.org). Add direct links to
 \ Microhobby pages.
+\
+\ 2016-11-20: Fix comment.
+\
+\ 2016-12-30: Modify the header comments.
 
 \ vim: textwidth=64
 
